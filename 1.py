@@ -1,10 +1,13 @@
 import telebot
 import yt_dlp
 import os
+import subprocess
 
 # توكن البوت
 TOKEN = "6265424443:AAEmHlTzANDravLJCb8BsVmiWzgZl0XFM3Y"
 bot = telebot.TeleBot(TOKEN)
+
+MAX_FILE_SIZE = 50 * 1024 * 1024  # 50 ميغابايت
 
 # رسالة ترحيب أو تعليمات
 @bot.message_handler(commands=['start', 'help'])
@@ -52,25 +55,59 @@ def handle_callback_query(call):
     
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info_dict = ydl.download([url])
+            ydl.download([url])
+            
             if action == "video":
                 video_path = "video.mp4"
                 if os.path.exists(video_path):
-                    with open(video_path, 'rb') as video:
-                        bot.send_video(call.message.chat.id, video)
+                    if os.path.getsize(video_path) <= MAX_FILE_SIZE:
+                        # إذا كان الفيديو أقل من 50 ميغابايت، قم بإرساله مباشرة
+                        with open(video_path, 'rb') as video:
+                            bot.send_video(call.message.chat.id, video)
+                    else:
+                        # تقسيم الفيديو إلى أجزاء صغيرة وإرسالها
+                        split_and_send_file(video_path, call.message.chat.id)
                     os.remove(video_path)
-                else:
-                    bot.send_message(call.message.chat.id, "فشل تحميل الفيديو.")
             elif action == "audio":
                 audio_path = "audio.mp3"
                 if os.path.exists(audio_path):
-                    with open(audio_path, 'rb') as audio:
-                        bot.send_audio(call.message.chat.id, audio)
+                    if os.path.getsize(audio_path) <= MAX_FILE_SIZE:
+                        # إذا كان الصوت أقل من 50 ميغابايت، قم بإرساله مباشرة
+                        with open(audio_path, 'rb') as audio:
+                            bot.send_audio(call.message.chat.id, audio)
+                    else:
+                        # تقسيم الصوت إلى أجزاء صغيرة وإرسالها
+                        split_and_send_file(audio_path, call.message.chat.id)
                     os.remove(audio_path)
-                else:
-                    bot.send_message(call.message.chat.id, "فشل تحميل الصوت.")
     except Exception as e:
-        bot.send_message(call.message.chat.id, f"حدث خطأ أثناء التحميل: {str(e)}")
+        bot.send_message(call.message.chat.id, f"حدث خطأ أثناء التحميل أو الإرسال: {str(e)}")
+
+def split_and_send_file(file_path, chat_id):
+    try:
+        # تحديد اسم الملف والامتداد
+        file_name, file_extension = os.path.splitext(file_path)
+        output_pattern = f"{file_name}_part_%03d{file_extension}"
+        
+        # تقسيم الملف باستخدام ffmpeg
+        command = [
+            'ffmpeg', '-i', file_path, '-c', 'copy', '-map', '0',
+            '-f', 'segment', '-segment_time', '00:01:00', output_pattern
+        ]
+        subprocess.run(command, check=True)
+        
+        # إرسال الأجزاء المقطعة للمستخدم
+        part_number = 0
+        while True:
+            part_file = output_pattern % part_number
+            if os.path.exists(part_file):
+                with open(part_file, 'rb') as part:
+                    bot.send_document(chat_id, part)
+                os.remove(part_file)
+                part_number += 1
+            else:
+                break
+    except Exception as e:
+        bot.send_message(chat_id, f"حدث خطأ أثناء تقسيم وإرسال الملف: {str(e)}")
 
 # بدء البوت
 bot.polling()
