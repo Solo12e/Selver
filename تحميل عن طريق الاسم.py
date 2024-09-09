@@ -5,7 +5,7 @@ from aiogram.utils import executor
 import yt_dlp
 import os
 
-API_TOKEN = '7539260401:AAGHHWuTXvCQ-Z4W-YFt8oLSoH4ZSbWpDEA'
+API_TOKEN = '6265424443:AAEmHlTzANDravLJCb8BsVmiWzgZl0XFM3Y'
 
 logging.basicConfig(level=logging.INFO)
 
